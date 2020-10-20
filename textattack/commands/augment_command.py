@@ -14,14 +14,7 @@ import tqdm
 
 import textattack
 from textattack.commands import TextAttackCommand
-
-AUGMENTATION_RECIPE_NAMES = {
-    "wordnet": "textattack.augmentation.WordNetAugmenter",
-    "embedding": "textattack.augmentation.EmbeddingAugmenter",
-    "charswap": "textattack.augmentation.CharSwapAugmenter",
-    "eda": "textattack.augmentation.EasyDataAugmenter",
-    "checklist": "textattack.augmentation.CheckListAugmenter",
-}
+from textattack.commands.shared_args import AUGMENTATION_RECIPE_NAMES
 
 
 class AugmentCommand(TextAttackCommand):

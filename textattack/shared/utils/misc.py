@@ -1,6 +1,8 @@
+import importlib
 import json
 import os
 import random
+import time
 
 import numpy as np
 import torch
@@ -122,3 +124,22 @@ def hashable(key):
 
 def sigmoid(n):
     return 1 / (1 + np.exp(-n))
+
+
+# The split token allows users to optionally pass multiple arguments in a single
+# parameter by separating them with the split token.
+ARGS_SPLIT_TOKEN = "^"
+
+
+def load_module_from_file(file_path):
+    """Uses ``importlib`` to dynamically open a file and load an object from
+    it."""
+    temp_module_name = f"temp_{time.time()}"
+    colored_file_path = textattack.shared.utils.color_text(
+        file_path, color="blue", method="ansi"
+    )
+    textattack.shared.logger.info(f"Loading module from `{colored_file_path}`.")
+    spec = importlib.util.spec_from_file_location(temp_module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module

@@ -16,12 +16,9 @@ import torch
 import tqdm
 
 import textattack
+from textattack.commands.shared_args import parse_dataset_from_args
 
-from .attack_args_helpers import (
-    parse_attack_from_args,
-    parse_dataset_from_args,
-    parse_logger_from_args,
-)
+from .attack_args_helpers import parse_attack_from_args, parse_logger_from_args
 
 logger = textattack.shared.logger
 
