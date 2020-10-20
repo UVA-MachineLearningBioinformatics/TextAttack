@@ -24,7 +24,7 @@ class TrainModelCommand(TextAttackCommand):
             outputs_dir, f"{args.model}-{args.dataset}-{date_now}/"
         )
 
-        from .run_training import train_model
+        from textattack.commands.training import train_model
 
         train_model(args)
 

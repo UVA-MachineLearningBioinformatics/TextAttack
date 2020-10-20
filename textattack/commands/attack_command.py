@@ -17,11 +17,8 @@ from textattack.commands.attack.attack_args import (
     SEARCH_METHOD_CLASS_NAMES,
     WHITE_BOX_TRANSFORMATION_CLASS_NAMES,
 )
-from textattack.commands.attack.attack_args_helpers import (
-    add_dataset_args,
-    add_model_args,
-    default_checkpoint_dir,
-)
+from textattack.commands.attack.attack_args_helpers import default_checkpoint_dir
+from textattack.commands.shared_args import add_dataset_args, add_model_args
 
 
 class AttackCommand(TextAttackCommand):

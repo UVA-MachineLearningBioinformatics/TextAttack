@@ -7,13 +7,14 @@ TextAttack Command Arg Parsing
 # !/usr/bin/env python
 import argparse
 
-from textattack.commands.attack import AttackCommand, AttackResumeCommand
-from textattack.commands.augment import AugmentCommand
-from textattack.commands.benchmark_recipe import BenchmarkRecipeCommand
-from textattack.commands.eval_model import EvalModelCommand
-from textattack.commands.list_things import ListThingsCommand
-from textattack.commands.peek_dataset import PeekDatasetCommand
-from textattack.commands.train_model import TrainModelCommand
+from textattack.commands.attack_command import AttackCommand
+from textattack.commands.attack_resume_command import AttackResumeCommand
+from textattack.commands.augment_command import AugmentCommand
+from textattack.commands.benchmark_recipe_command import BenchmarkRecipeCommand
+from textattack.commands.eval_model_command import EvalModelCommand
+from textattack.commands.list_things_command import ListThingsCommand
+from textattack.commands.peek_dataset_command import PeekDatasetCommand
+from textattack.commands.train_model_command import TrainModelCommand
 
 
 def main():
