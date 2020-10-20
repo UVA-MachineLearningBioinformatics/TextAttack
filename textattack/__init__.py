@@ -16,6 +16,7 @@ from . import (
     augmentation,
     commands,
     constraints,
+    coverage,
     datasets,
     goal_function_results,
     goal_functions,
