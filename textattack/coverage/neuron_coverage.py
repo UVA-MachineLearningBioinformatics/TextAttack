@@ -1,63 +1,65 @@
 import logging
 
 import torch
-from tqdm import tqdm
 import transformers
+from tqdm import tqdm
+import itertools
+import copy
 
 import textattack
-
+from collections import defaultdict
 from .coverage import ExtrinsicCoverage
 
 logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
 
 
-COVERAGE_MODEL_TYPES = ["bert-base-uncased"]
+COVERAGE_MODEL_TYPES = ["bert", "albert", "distilbert", "roberta"]
 
 
-class NeuronCoverage(ExtrinsicCoverage):
+class neuronCoverage(ExtrinsicCoverage):
     """
     ``neuronCoverage`` measures the neuron coverage acheived by a testset
     Args:
                     test_model(Union[str, torch.nn.Module]): name of the pretrained language model from `transformers`
-                                    or the actual language model as a `torch.nn.Module` class. Default is "gpt2" from `transformers`.
+                                    or the actual test model as a `torch.nn.Module` class. Default is "bert base uncased" from `transformers`.
                     tokenizer (:obj:``, optional): If `test_model` is not a pretrained model from `transformers, need to provide
                                     the tokenizer here.
                     max_seq_len (int): Maximum sequence length accepted by the model to be tested.  However, if you are using a pretrained model from `transformers`, this is handled
                                     automatically using information from `model.config`.
-                    threshold: threshold for marking a neuron as activated
-                    coarse_coverage(bool): if measure neuron coverage at the level of layer outputs
+                    threshold(float): threshold for marking a neuron as activated
+                    coarse_coverage(bool):  measure neuron coverage at the level of layer outputs
     """
 
     def __init__(
         self,
-        test_model="bert-base-uncased-ag-news",
+        test_model="textattack/bert-base-uncased-ag-news",
         tokenizer=None,
-        max_seq_len=512,
+        max_seq_len=-1,
         threshold=0.0,
         coarse_coverage=True,
     ):
-        self.test_model = None
+
         self.coarse_coverage = coarse_coverage
-        for available_model in COVERAGE_MODEL_TYPES:
-            if available_model in test_model:
-                self.model_type = available_model
-                config = transformers.AutoConfig.from_pretrained(
-                    test_model, output_hidden_states=True
+
+        config = transformers.AutoConfig.from_pretrained(
+            test_model, output_hidden_states=True
+        )
+        if config.model_type in COVERAGE_MODEL_TYPES:
+            self.test_model = (
+                transformers.AutoModelForSequenceClassification.from_pretrained(
+                    test_model, config=config
                 )
-                self.test_model = (
-                    transformers.AutoModelForSequenceClassification.from_pretrained(
-                        test_model, config=config
-                    )
-                )
-                self.tokenizer = transformers.AutoTokenizer.from_pretrained(
-                    test_model, use_fast=True
-                )
-                self.max_seq_len = (
-                    max_seq_len
-                    if max_seq_len != -1
-                    else self.test_model.config.n_positions
-                )
-        if self.test_model is None:
+            )
+            self.tokenizer = transformers.AutoTokenizer.from_pretrained(
+                test_model, use_fast=True
+            )
+            self.model_type = self.test_model.config.model_type
+            self.max_seq_len = (
+                max_seq_len
+                if max_seq_len != -1
+                else self.test_model.config.max_position_embeddings
+            )
+        else:
             raise ValueError(
                 "`neuronCoverage` only accepts models in "
                 + ",".join(COVERAGE_MODEL_TYPES)
@@ -69,18 +71,32 @@ class NeuronCoverage(ExtrinsicCoverage):
         self.coverage_tracker = self._init_coverage()
 
     def _init_coverage(self):
-        if self.model_type == "bert-base-uncased":
-            num_layers = 13
-            intermediate_hidden_state = 768
+        """Initialize `coverage_tracker` dictionary
 
-            if self.coarse_coverage:
-                coverage_tracker = torch.zeros(
-                    (num_layers, self.max_seq_len, intermediate_hidden_state),
-                    dtype=torch.bool,
-                )
-            return coverage_tracker
+        Returns:
+        `coverage_tracker`(dict): a dictionary with key: neuron and value: (bool) intialized False
+        """
+        coverage_tracker = defaultdict(bool)
 
-    def _update_coarse_coverage(self, text):
+        for bert_layer_index in range(self.test_model.config.num_hidden_layers):
+            coverage_tracker[(bert_layer_index, "output")] = torch.zeros(
+                (self.max_seq_len, self.test_model.config.hidden_size), dtype=bool
+            ).to(textattack.shared.utils.device)
+        coverage_tracker["classifier"] = torch.zeros(
+            (len(self.test_model.config.label2id)), dtype=bool
+        ).to(textattack.shared.utils.device)
+        coverage_tracker["embedding"] = torch.zeros(
+            (self.max_seq_len, self.test_model.config.hidden_size), dtype=bool
+        ).to(textattack.shared.utils.device)
+
+        return coverage_tracker
+
+    def _eval(self, text):
+        """Update `coverage_tracker` for input `text` for coarse coverage
+        Args:
+                `text`(str): text to update neuron coverage of.
+
+        """
         encodings = self.tokenizer(text, return_tensors="pt")
         if self.max_seq_len > 0:
             input_ids = encodings.input_ids[:, : self.max_seq_len]
@@ -89,27 +105,84 @@ class NeuronCoverage(ExtrinsicCoverage):
         input_ids = input_ids.to(textattack.shared.utils.device)
         attention_mask = attention_mask.to(textattack.shared.utils.device)
         outputs = self.test_model(input_ids, attention_mask=attention_mask)
-        for h_index, hidden_vector in enumerate(outputs[1]):
+        return outputs
 
-            self.coverage_tracker[h_index, : hidden_vector.size()[1]] = torch.where(
-                hidden_vector[0, ...] > self.threshold,
+    def _update_coarse_coverage(self, text):
+        """Update `coverage_tracker` for input `text` for coarse coverage
+        Args:
+                `text`(str): text to update neuron coverage of.
+
+        """
+        encodings = self.tokenizer(text, return_tensors="pt")
+        if self.max_seq_len > 0:
+            input_ids = encodings.input_ids[:, : self.max_seq_len]
+            attention_mask = encodings.attention_mask[:, : self.max_seq_len]
+
+        input_ids = input_ids.to(textattack.shared.utils.device)
+        attention_mask = attention_mask.to(textattack.shared.utils.device)
+        outputs = self.test_model(input_ids, attention_mask=attention_mask)
+        sentence_length = outputs[1][0][0, ...].size(0)
+
+        def scale(layer_outputs, rmax=1, rmin=0):
+            divider = layer_outputs.max() - layer_outputs.min()
+
+            if divider == 0:
+                return torch.zeros_like(layer_outputs)
+
+            X_std = (layer_outputs - layer_outputs.min()) / divider
+
+            X_scaled = X_std * (rmax - rmin) + rmin
+            return X_scaled
+
+        self.coverage_tracker[("embedding")][0:sentence_length, ...] = torch.where(
+            scale(outputs[1][0][0, ...]) > self.threshold,
+            torch.ones(
+                (sentence_length, self.test_model.config.hidden_size), dtype=bool
+            ).to(textattack.shared.utils.device),
+            self.coverage_tracker[("embedding")][0:sentence_length, ...],
+        )
+        for h_index, hidden_vector in enumerate(outputs[1][1:]):
+
+            self.coverage_tracker[(h_index, "output")][
+                0:sentence_length, ...
+            ] = torch.where(
+                scale(hidden_vector[0, ...]) > self.threshold,
                 torch.ones(
-                    (hidden_vector.size()[1], self.coverage_tracker.size(2)),
-                    dtype=torch.bool,
+                    (sentence_length, self.test_model.config.hidden_size), dtype=bool
                 ).to(textattack.shared.utils.device),
-                torch.zeros(
-                    (hidden_vector.size()[1], self.coverage_tracker.size(2)), dtype=bool
-                ).to(textattack.shared.utils.device),
+                self.coverage_tracker[(h_index, "output")][0:sentence_length, ...],
             )
 
-    def _compute_coverage(self):
-
-        neuron_coverage = torch.sum(self.coverage_tracker).item() / (
-            1.0 * self.coverage_tracker.numel()
+        self.coverage_tracker["classifier"] = torch.where(
+            scale(outputs[0][0, ...]) > self.threshold,
+            torch.ones((len(self.test_model.config.label2id)), dtype=bool).to(
+                textattack.shared.utils.device
+            ),
+            self.coverage_tracker["classifier"],
         )
+
+    def _update_refined_coverage(self, text):
+        """Update `coverage_tracker` for input `text` for refined coverage
+        Args:
+                `text`(str): text to update neuron coverage of.
+
+        """
+
+    def _compute_coverage(self):
+        """Calculate `neuron_coverage` for current model"""
+
+        neuron_coverage = sum(
+            [entry.sum().item() for entry in self.coverage_tracker.values()]
+        ) / sum([entry.numel() for entry in self.coverage_tracker.values()])
+
         return neuron_coverage
 
     def _update_coverage(self, text):
+        """Update `coverage_tracker` for input `text`
+        Args:
+                `text`(str): text to update neuron coverage of.
+
+        """
         if self.coarse_coverage:
             self._update_coarse_coverage(text)
         else:
@@ -124,6 +197,7 @@ class NeuronCoverage(ExtrinsicCoverage):
                         neuron coverage (float)
         """
         for t in tqdm(testset):
-            self._update_coverage(t)
+
+            self._update_coverage(t[0]["text"])
         neuron_coverage = self._compute_coverage()
         return neuron_coverage
