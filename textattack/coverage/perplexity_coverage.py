@@ -1,14 +1,15 @@
 import logging
 
 import torch
-import transformers
 from tqdm import tqdm
+import transformers
 
 import textattack
 
 from .coverage import ExtrinsicCoverage
 
 logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
+
 
 class PerplexityCoverage(ExtrinsicCoverage):
     """
@@ -18,48 +19,36 @@ class PerplexityCoverage(ExtrinsicCoverage):
             or the actual language model as a `torch.nn.Module` class. Default is "gpt2" from `transformers`.
         tokenizer (:obj:``, optional): If `language_model` is not a pretrained model from `transformers, need to provide
             the tokenizer here.
-        max_seq_len (int): Maximum sequence length accepted by the language model. Please set this if you're using
-            fixed-length language model. However, if you are using a pretrained model from `transformers`, this is handled
-            automatically using information from `model.config`.
+        max_seq_len(:obj:`int`, optional): Max sequence length to consider. If not set and if the language model is a fixed-length model,
+            defaults to the max sequence of length of the model.
+        batch_size (int): Batch size when calculating perplexity.
     """
 
     def __init__(
-        self, language_model="gpt2", tokenizer=None, max_seq_len=-1):
+        self, language_model="gpt2", tokenizer=None, max_seq_len=None, stride_size=512
+    ):
         if isinstance(language_model, str):
             self.language_model = transformers.AutoModelForCausalLM.from_pretrained(
                 language_model
             )
-            self.tokenizer = transformers.AutoTokenizer.from_pretrained(language_model, use_fast=True)
+            self.tokenizer = transformers.AutoTokenizer.from_pretrained(
+                language_model, use_fast=True
+            )
             self.max_seq_len = (
-                max_seq_len
-                if max_seq_len != -1
-                else self.language_model.config.n_positions
+                max_seq_len if max_seq_len else self.language_model.config.n_positions
             )
-            self._hf = True
-        elif isinstance(language_model, torch.nn.Module):
-            if tokenizer is None:
+            if stride_size > self.max_seq_len:
                 raise ValueError(
-                    "`tokenizer` must be provided if `language_model` is a torch.nn.Module class"
+                    f"Stride size cannot be greater than max sequence length ({stride_size} > {max_seq_len})."
                 )
-            self.language_model = language_model
-            self.tokenzier = tokenizer
-            self.max_seq_len = max_seq_len
-            self._hf = False
+            self.stride_size = stride_size
         else:
-            raise ValueError(
-                "`PerplexityCoverage` only accepts models from `transformers` package or `torch.nn.Module` models."
-            )
+            raise ValueError('`PerplexityCoverage` only currently supports "gpt2"')
 
         self.language_model.to(textattack.shared.utils.device)
         self.language_model.eval()
 
-    def _hf_calc_perplexity(self, text):
-        """Calculate the perplexity of `text` for Huggingface models.
-        Args:
-            text (str): text to calculate perplexity of.
-        Returns:
-            perplexity of `text` as float.
-        """
+    def _gpt2_calc_perplexity(self, text):
         encodings = self.tokenizer(text, return_tensors="pt")
         if self.max_seq_len > 0:
             input_ids = encodings.input_ids[:, : self.max_seq_len]
@@ -67,25 +56,31 @@ class PerplexityCoverage(ExtrinsicCoverage):
 
         input_ids = input_ids.to(textattack.shared.utils.device)
         attention_mask = attention_mask.to(textattack.shared.utils.device)
-        
-        loss = self.language_model(input_ids, attention_mask=attention_mask, labels=input_ids)[0]
-        ppl = torch.exp(loss).item()
-        if encodings.input_ids.shape[1] > self.max_seq_len and self.max_seq_len > 0:
-            ppl = ppl * input_ids.shape[1]
-            k = 0
-            for i in range(self.max_seq_len+1, encodings.input_ids.shape[1]):
-                input_ids = encodings.input_ids[:, i-self.max_seq_len:i].to(textattack.shared.utils.device)
-                attention_mask = encodings.attention_mask[:, i-self.max_seq_len:i].to(textattack.shared.utils.device)
-                label_ids = input_ids.clone()
-                label_ids[:, :-1] = -100
-                label_ids.to(textattack.shared.utils.device)
-                loss = self.language_model(input_ids, attention_mask=attention_mask, labels=label_ids)[0]
-                ppl += torch.exp(loss).item()
-                k += 1
 
-            ppl = ppl / (input_ids.shape[1] + k)
+        lls = []
+        for i in range(0, input_ids.size(1), self.stride_size):
+            begin_loc = max(i + self.stride_size - self.max_seq_len, 0)
+            end_loc = min(i + self.stride_size, input_ids.size(1))
+            trg_len = end_loc - i  # may be different from stride on last loop
+            input_ids = input_ids[:, begin_loc:end_loc].to(
+                textattack.shared.utils.device
+            )
+            attention_mask = attention_mask[:, begin_loc:end_loc].to(
+                textattack.shared.utils.device
+            )
+            target_ids = input_ids.clone()
+            target_ids[:, :-trg_len] = -100
 
-        return ppl
+            with torch.no_grad():
+                outputs = self.language_model(
+                    input_ids, attention_mask=attention_mask, labels=target_ids
+                )
+                log_likelihood = outputs[0] * trg_len
+
+            lls.append(log_likelihood)
+
+        ppl = torch.exp(torch.stack(lls).sum() / end_loc)
+        return ppl.item()
 
     def __call__(self, testset):
         """
@@ -95,12 +90,8 @@ class PerplexityCoverage(ExtrinsicCoverage):
         Returns:
             average perplexity (float)
         """
-        total_ppl = 0
-        for t in tqdm(testset):
-            if self._hf:
-                total_ppl += self._hf_calc_perplexity(t)
-            else:
-                #TODO add `calc_perlexity` for regular torch.nn.Module models
-                pass 
-        avg_ppl = total_ppl / len(testset)
-        return avg_ppl
+        ppls = []
+        for text in tqdm(testset):
+            pp = self._gpt2_calc_perplexity(text)
+            ppls.append(pp)
+        return sum(ppls) / len(testset), ppls

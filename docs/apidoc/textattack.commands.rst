@@ -13,30 +13,60 @@ Subpackages
    :maxdepth: 6
 
    textattack.commands.attack
-   textattack.commands.eval_model
-   textattack.commands.train_model
+   textattack.commands.training
+   textattack.commands.coverage
+   textattack.commands.shared_args
 
 
-
-.. automodule:: textattack.commands.augment
+.. automodule:: textattack.commands.textattack_command
    :members:
    :undoc-members:
    :show-inheritance:
 
 
-.. automodule:: textattack.commands.benchmark_recipe
+.. automodule:: textattack.commands.attack_command
    :members:
    :undoc-members:
    :show-inheritance:
 
 
-.. automodule:: textattack.commands.list_things
+.. automodule:: textattack.commands.attack_resume_command
    :members:
    :undoc-members:
    :show-inheritance:
 
 
-.. automodule:: textattack.commands.peek_dataset
+.. automodule:: textattack.commands.augment_command
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
+.. automodule:: textattack.commands.train_model_command
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
+.. automodule:: textattack.commands.eval_model_command
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
+.. automodule:: textattack.commands.benchmark_recipe_command
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
+.. automodule:: textattack.commands.list_things_command
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
+.. automodule:: textattack.commands.peek_dataset_command
    :members:
    :undoc-members:
    :show-inheritance:
@@ -48,7 +78,3 @@ Subpackages
    :show-inheritance:
 
 
-.. automodule:: textattack.commands.textattack_command
-   :members:
-   :undoc-members:
-   :show-inheritance:

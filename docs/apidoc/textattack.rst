@@ -15,6 +15,7 @@ Complete API Reference
    textattack.augmentation
    textattack.commands
    textattack.constraints
+   textattack.coverage
    textattack.datasets
    textattack.goal_function_results
    textattack.goal_functions
