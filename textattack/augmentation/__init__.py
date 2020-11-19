@@ -13,5 +13,5 @@ from .recipes import (
     EasyDataAugmenter,
     CheckListAugmenter,
     DeletionAugmenter,
-		CoverageAugmenter,
+    CoverageGuidedAugmenter,
 )
