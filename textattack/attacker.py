@@ -160,7 +160,9 @@ class Attacker:
             idx = worklist.popleft()
             i += 1
             example, ground_truth_output = self.dataset[idx]
-            example = textattack.shared.AttackedText(example)
+            example = textattack.shared.AttackedText(
+                example, word_segmenter=self.attack.word_segmenter
+            )
             if self.dataset.label_names is not None:
                 example.attack_attrs["label_names"] = self.dataset.label_names
             result = self.attack.attack(example, ground_truth_output)
@@ -231,7 +233,9 @@ class Attacker:
         for i in worklist:
             try:
                 example, ground_truth_output = self.dataset[i]
-                example = textattack.shared.AttackedText(example)
+                example = textattack.shared.AttackedText(
+                    example, word_segmenter=self.attack.word_segmenter
+                )
                 if self.dataset.label_names is not None:
                     example.attack_attrs["label_names"] = self.dataset.label_names
                 in_queue.put((i, example, ground_truth_output))
@@ -287,7 +291,9 @@ class Attacker:
                 worklist_tail += 1
                 try:
                     example, ground_truth_output = self.dataset[worklist_tail]
-                    example = textattack.shared.AttackedText(example)
+                    example = textattack.shared.AttackedText(
+                        example, word_segmenter=self.attack.word_segmenter
+                    )
                     if self.dataset.label_names is not None:
                         example.attack_attrs["label_names"] = self.dataset.label_names
                     worklist.append(worklist_tail)
@@ -373,7 +379,9 @@ class Attacker:
 
             print("Attacking...")
 
-            example = textattack.shared.attacked_text.AttackedText(text)
+            example = textattack.shared.AttackedText(
+                text, word_segmenter=attack.word_segmenter
+            )
             output = attack.goal_function.get_output(example)
             result = attack.attack(example, output)
             print(result.__str__(color_method="ansi") + "\n")

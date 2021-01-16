@@ -15,9 +15,10 @@ class LazyLoader(types.ModuleType):
     This allows them to only be loaded when they are used.
     """
 
-    def __init__(self, local_name, parent_module_globals, name):
+    def __init__(self, local_name, parent_module_globals, name, custom_direction=None):
         self._local_name = local_name
         self._parent_module_globals = parent_module_globals
+        self._custom_direction = custom_direction
 
         super(LazyLoader, self).__init__(name)
 
@@ -27,11 +28,14 @@ class LazyLoader(types.ModuleType):
         try:
             module = importlib.import_module(self.__name__)
         except ModuleNotFoundError as e:
-            raise ModuleNotFoundError(
-                f"Lazy module loader cannot find module named `{self.__name__}`. "
-                f"This might be because TextAttack does not automatically install some optional dependencies. "
-                f"Please run `pip install {self.__name__}` to install the package."
-            ) from e
+            if self._custom_direction:
+                raise ModuleNotFoundError(self._custom_direction) from e
+            else:
+                raise ModuleNotFoundError(
+                    f"Lazy module loader cannot find module named `{self.__name__}`. "
+                    f"This might be because TextAttack does not automatically install some optional dependencies. "
+                    f"Please run `pip install {self.__name__}` to install the package."
+                ) from e
         self._parent_module_globals[self._local_name] = module
 
         # Update this object's dict so that if someone keeps a reference to the

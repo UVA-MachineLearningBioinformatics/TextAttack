@@ -112,11 +112,11 @@ class WordSwapMaskedLM(WordSwap):
         """
         masked_texts = []
         for index in indices_to_modify:
-            masked_text = current_text.replace_word_at_index(
+            masked_text = current_text.replace_word_at_index_raw(
                 index, self._lm_tokenizer.mask_token
             )
             # Obtain window
-            masked_text = masked_text.text_window_around_index(index, self.window_size)
+            #masked_text = masked_text.text_window_around_index(index, self.window_size)
             masked_texts.append(masked_text)
 
         i = 0
@@ -143,20 +143,15 @@ class WordSwapMaskedLM(WordSwap):
                 for _id in ranked_indices:
                     _id = _id.item()
                     token = self._lm_tokenizer.convert_ids_to_tokens(_id)
-                    if utils.check_if_subword(
-                        token,
-                        self._language_model.config.model_type,
-                        (masked_index == 1),
+                    word = utils.strip_BPE_artifacts(
+                        token, self._language_model.config.model_type
+                    )
+                    if (
+                        mask_token_probs[_id] >= self.min_confidence
+                        and utils.is_one_word(word)
+                        and not utils.check_if_punctuations(word)
                     ):
-                        word = utils.strip_BPE_artifacts(
-                            token, self._language_model.config.model_type
-                        )
-                        if (
-                            mask_token_probs[_id] >= self.min_confidence
-                            and utils.is_one_word(word)
-                            and not utils.check_if_punctuations(word)
-                        ):
-                            top_words.append(word)
+                        top_words.append(word)
 
                     if (
                         len(top_words) >= self.max_candidates
@@ -273,9 +268,9 @@ class WordSwapMaskedLM(WordSwap):
 
                 for r in replacement_words:
                     if r != word_at_index:
-                        transformed_texts.append(
-                            current_text.replace_word_at_index(i, r)
-                        )
+                        new_text = current_text.replace_word_at_index(i, r)
+                        if new_text.num_words == current_text.num_words:
+                            transformed_texts.append(new_text)
 
             return transformed_texts
 
@@ -288,10 +283,11 @@ class WordSwapMaskedLM(WordSwap):
                 index_to_modify = indices_to_modify[i]
                 word_at_index = current_text.words[index_to_modify]
                 for word in replacement_words[i]:
-                    if word != word_at_index and len(utils.words_from_text(word)) == 1:
-                        transformed_texts.append(
-                            current_text.replace_word_at_index(index_to_modify, word)
-                        )
+                    if word != word_at_index:
+                        new_text = current_text.replace_word_at_index(index_to_modify, word)
+                        if new_text.num_words == current_text.num_words:
+                            transformed_texts.append(new_text)
+
             return transformed_texts
         else:
             raise ValueError(f"Unrecognized value {self.method} for `self.method`.")

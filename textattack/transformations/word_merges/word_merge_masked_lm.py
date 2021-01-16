@@ -152,9 +152,7 @@ class WordMergeMaskedLM(Transformation):
         transformed_texts = []
         indices_to_modify = list(indices_to_modify)
         # find indices that are suitable to merge
-        token_tags = [
-            current_text.pos_of_word_index(i) for i in range(current_text.num_words)
-        ]
+        token_tags = [current_text.pos_tags[i] for i in range(current_text.num_words)]
         merge_indices = find_merge_index(token_tags)
         merged_words = self._get_merged_words(current_text, merge_indices)
         transformed_texts = []

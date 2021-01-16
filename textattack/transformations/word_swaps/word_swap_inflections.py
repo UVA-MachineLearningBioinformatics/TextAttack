@@ -88,7 +88,7 @@ class WordSwapInflections(WordSwap):
         transformed_texts = []
         for i in indices_to_modify:
             word_to_replace = current_text.words[i]
-            word_to_replace_pos = current_text.pos_of_word_index(i)
+            word_to_replace_pos = current_text.pos_tags[i]
             replacement_words = (
                 self._get_replacement_words(word_to_replace, word_to_replace_pos) or []
             )

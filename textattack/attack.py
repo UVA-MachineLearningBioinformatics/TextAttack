@@ -10,6 +10,8 @@ Attack: TextAttack builds attacks from four components:
 The ``Attack`` class represents an adversarial attack composed of a goal function, search method, transformation, and constraints.
 """
 
+from collections import OrderedDict
+
 import lru
 
 import textattack
@@ -46,6 +48,7 @@ class Attack:
         constraints=[],
         transformation=None,
         search_method=None,
+        word_segmenter=None,
         transformation_cache_size=2 ** 15,
         constraint_cache_size=2 ** 15,
     ):
@@ -117,6 +120,8 @@ class Attack:
         self.search_method.filter_transformations = self.filter_transformations
         if not search_method.is_black_box:
             self.search_method.get_model = lambda: self.goal_function.model
+
+        self.word_segmenter = word_segmenter
 
     def clear_cache(self, recursive=True):
         self.constraints_cache.clear()
@@ -286,17 +291,20 @@ class Attack:
     def attack(self, example, ground_truth_output):
         """Attack a single example represented as ``AttackedText``
         Args:
-            example (Union[AttackedText]): example to attack.
+            example (Union[str, OrderedDict]): example to attack.
             ground_truth_output: ground truth output of ``example``.
         Returns:
             AttackResult
         """
         assert isinstance(
-            example, AttackedText
-        ), "`example` must be of type `AttackedText`."
+            example, (str, OrderedDict, AttackedText)
+        ), "`example` must either be `str`, `OrderedDict`, or `AttackedText`."
         assert isinstance(
             ground_truth_output, (int, str)
         ), "`ground_truth_output` must either be `str` or `int`."
+
+        if not isinstance(example, AttackedText):
+            example = AttackedText(example, word_segmenter=self.word_segmenter)
         goal_function_result, _ = self.goal_function.init_attack_example(
             example, ground_truth_output
         )

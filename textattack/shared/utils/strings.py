@@ -333,7 +333,7 @@ def strip_BPE_artifacts(token, model_type):
             f"Model type {model_type} is not available. Options are {avail_models}."
         )
     if model_type in ["bert", "electra"]:
-        return token.replace("##", "")
+        return token.replace("##", "").replace("▁", "")
     elif model_type in ["gpt", "gpt2", "roberta", "bart", "longformer"]:
         return token.replace("Ġ", "")
     elif model_type == "xlnet":

@@ -48,7 +48,9 @@ class WordSwap(Transformation):
             for r in replacement_words:
                 if r == word_to_replace:
                     continue
-                transformed_texts_idx.append(current_text.replace_word_at_index(i, r))
+                new_text = current_text.replace_word_at_index(i, r)
+                if new_text.num_words == current_text.num_words:
+                    transformed_texts_idx.append(new_text)
             transformed_texts.extend(transformed_texts_idx)
 
         return transformed_texts

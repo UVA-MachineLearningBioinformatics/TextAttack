@@ -15,3 +15,4 @@ from . import validators
 from .attacked_text import AttackedText
 from .word_embeddings import AbstractWordEmbedding, WordEmbedding, GensimWordEmbedding
 from .checkpoint import AttackCheckpoint
+from .word_segmenters import *

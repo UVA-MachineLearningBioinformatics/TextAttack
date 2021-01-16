@@ -16,7 +16,9 @@ import torch
 
 import textattack
 
-from .utils import device, words_from_text
+from .taggers import EnglishPosTagger
+from .utils import device
+from .word_segmenters import EnglishWordSegmenter
 
 flair.device = device
 
@@ -42,7 +44,9 @@ class AttackedText:
 
     SPLIT_TOKEN = ">>>>"
 
-    def __init__(self, text_input, attack_attrs=None):
+    def __init__(
+        self, text_input, word_segmenter=None, pos_tagger=None, attack_attrs=None
+    ):
         # Read in ``text_input`` as a string or OrderedDict.
         if isinstance(text_input, str):
             self._text_input = OrderedDict([("text", text_input)])
@@ -52,13 +56,26 @@ class AttackedText:
             raise TypeError(
                 f"Invalid text_input type {type(text_input)} (required str or OrderedDict)"
             )
-        # Process input lazily.
-        self._words = None
-        self._words_per_input = None
-        self._pos_tags = None
-        self._ner_tags = None
-        # Format text inputs.
-        self._text_input = OrderedDict([(k, v) for k, v in self._text_input.items()])
+
+        if word_segmenter:
+            self.word_segmenter = word_segmenter
+        else:
+            self.word_segmenter = EnglishWordSegmenter()
+
+        if pos_tagger or self.word_segmenter.POS_TAGGING_INCLUDED:
+            self.pos_tagger = pos_tagger
+        else:
+            self.pos_tagger = EnglishPosTagger()
+
+        if self.word_segmenter.POS_TAGGING_INCLUDED:
+            self.words, self.words_start_pos, self._pos_tags = self.word_segmenter(self.text)
+        else:
+            self.words, self.words_start_pos = self.word_segmenter(self.text)
+            self._pos_tags = None
+
+        # TODO
+        self.ner_tags = None
+
         if attack_attrs is None:
             self.attack_attrs = dict()
         elif isinstance(attack_attrs, dict):
@@ -123,39 +140,9 @@ class AttackedText:
         else:
             start = index - math.ceil(half_size)
             end = index + math.floor(half_size)
-        text_idx_start = self._text_index_of_word_index(start)
-        text_idx_end = self._text_index_of_word_index(end) + len(self.words[end])
+        text_idx_start = self.words_start_pos[start]
+        text_idx_end = self.words_start_pos[end] + len(self.words[end])
         return self.text[text_idx_start:text_idx_end]
-
-    def pos_of_word_index(self, desired_word_idx):
-        """Returns the part-of-speech of the word at index `word_idx`.
-
-        Uses FLAIR part-of-speech tagger.
-        """
-        if not self._pos_tags:
-            sentence = Sentence(
-                self.text, use_tokenizer=textattack.shared.utils.words_from_text
-            )
-            textattack.shared.utils.flair_tag(sentence)
-            self._pos_tags = sentence
-        flair_word_list, flair_pos_list = textattack.shared.utils.zip_flair_result(
-            self._pos_tags
-        )
-
-        for word_idx, word in enumerate(self.words):
-            assert (
-                word in flair_word_list
-            ), "word absent in flair returned part-of-speech tags"
-            word_idx_in_flair_tags = flair_word_list.index(word)
-            if word_idx == desired_word_idx:
-                return flair_pos_list[word_idx_in_flair_tags]
-            else:
-                flair_word_list = flair_word_list[word_idx_in_flair_tags + 1 :]
-                flair_pos_list = flair_pos_list[word_idx_in_flair_tags + 1 :]
-
-        raise ValueError(
-            f"Did not find word from index {desired_word_idx} in flair POS tag"
-        )
 
     def ner_of_word_index(self, desired_word_idx):
         """Returns the ner tag of the word at index `word_idx`.
@@ -184,25 +171,15 @@ class AttackedText:
             f"Did not find word from index {desired_word_idx} in flair POS tag"
         )
 
-    def _text_index_of_word_index(self, i):
-        """Returns the index of word ``i`` in self.text."""
-        pre_words = self.words[: i + 1]
-        lower_text = self.text.lower()
-        # Find all words until `i` in string.
-        look_after_index = 0
-        for word in pre_words:
-            look_after_index = lower_text.find(word.lower(), look_after_index)
-        return look_after_index
-
     def text_until_word_index(self, i):
         """Returns the text before the beginning of word at index ``i``."""
-        look_after_index = self._text_index_of_word_index(i)
+        look_after_index = self.words_start_pos[i]
         return self.text[:look_after_index]
 
     def text_after_word_index(self, i):
         """Returns the text after the end of word at index ``i``."""
         # Get index of beginning of word then jump to end of word.
-        look_after_index = self._text_index_of_word_index(i) + len(self.words[i])
+        look_after_index = self.words_start_pos[i] + len(self.words[i])
         return self.text[look_after_index:]
 
     def first_word_diff(self, other_attacked_text):
@@ -298,29 +275,39 @@ class AttackedText:
             )
         return self.replace_words_at_indices([index], [new_word])
 
+    def replace_word_at_index_raw(self, index, new_word):
+        start_pos = self.words_start_pos[index]
+        end_pos = start_pos + len(self.words[index])
+        text = self.text[:start_pos] + new_word + self.text[end_pos:]
+        return text
+
     def delete_word_at_index(self, index):
         """This code returns a new AttackedText object where the word at
         ``index`` is removed."""
         return self.replace_word_at_index(index, "")
 
-    def insert_text_after_word_index(self, index, text):
+    def insert_text_after_word_index(self, index, text, space=True):
         """Inserts a string before word at index ``index`` and attempts to add
         appropriate spacing."""
         if not isinstance(text, str):
             raise TypeError(f"text must be an str, got type {type(text)}")
         word_at_index = self.words[index]
-        new_text = " ".join((word_at_index, text))
+        if space:
+            new_text = word_at_index + " " + text
+        else:
+            new_text = word_at_index + text
         return self.replace_word_at_index(index, new_text)
 
-    def insert_text_before_word_index(self, index, text):
+    def insert_text_before_word_index(self, index, text, space=True):
         """Inserts a string before word at index ``index`` and attempts to add
         appropriate spacing."""
         if not isinstance(text, str):
             raise TypeError(f"text must be an str, got type {type(text)}")
         word_at_index = self.words[index]
-        # TODO if ``word_at_index`` is at the beginning of a sentence, we should
-        # optionally capitalize ``text``.
-        new_text = " ".join((text, word_at_index))
+        if space:
+            new_text = word_at_index + " " + text
+        else:
+            new_text = word_at_index + text
         return self.replace_word_at_index(index, new_text)
 
     def get_deletion_indices(self):
@@ -355,17 +342,72 @@ class AttackedText:
         new_attack_attrs["original_index_map"] = self.attack_attrs[
             "original_index_map"
         ].copy()
-        new_i = 0
-        # Create the new attacked text by swapping out words from the original
-        # text with a sequence of 0+ words in the new text.
+        
+        ###
+        # Create the new text by swapping out words from the original text with a sequence of 0+ new words.
+        # For word segmentation method that does not depend on the entire text (e.g. English just separate by space),
+        # we can generate `perturbed_text` and update its `attack_attrs` in one pass.
+        # But for segmentation method that depend on the entire text (e.g. Korean, Chinese),
+        # we have to first generate the entire `perturbed_text`, then go back and update `attack_attrs`.
+        ### 
+        # List that records the (start, end) char positions of the word (or phrase) that replaces the ith original word
+        adv_word_pos_by_orig = [] 
         for i, (input_word, adv_word_seq) in enumerate(zip(self.words, new_words)):
             word_start = original_text.index(input_word)
             word_end = word_start + len(input_word)
             perturbed_text += original_text[:word_start]
             original_text = original_text[word_end:]
-            adv_words = words_from_text(adv_word_seq)
+            adv_start = len(perturbed_text)
+            adv_end = adv_start + len(adv_word_seq)
+            if adv_start == adv_end:
+                # Effectively deleting a word
+                adv_word_pos_by_orig.append((-1, -1))
+            else:
+                adv_word_pos_by_orig.append((adv_start, adv_end))
+            # Add substitute word(s) to new sentence.
+            perturbed_text += adv_word_seq
+
+            # Check spaces for deleted text.
+            if adv_start == adv_end and len(original_text):
+                # Remove extra space (or else there would be two spaces for each
+                # deleted word).
+                # @TODO What to do with punctuation in this case? This behavior is undefined.
+                if i == 0:
+                    # If the first word was deleted, take a subsequent space.
+                    if original_text[0] == " ":
+                        original_text = original_text[1:]
+                else:
+                    # If a word other than the first was deleted, take a preceding space.
+                    if perturbed_text[-1] == " ":
+                        perturbed_text = perturbed_text[:-1]
+        
+        perturbed_text += original_text  # Add all of the ending punctuation.
+        segment_result = self.word_segmenter(perturbed_text)
+        perturbed_words = segment_result[0]
+        pert_word_pos = segment_result[1] # List that holds the start char positions of each word in `perturbed_words`
+
+        ###
+        # This step matches each of the `perturbed_words` to the original word that it replaces.
+        # An original word can be replaced by one word or multiple words (e.g. "A B C" --> "E B C", "A B C" -->"E F B C").
+        # Also, one word of `perturbed_words` can replace two or more original words (e.g. "A B C" --> "EB C")
+        # This might happened when switching A with E causes word segmenter to thinking "EB" is one word. 
+        # In this case, we treat as if "EB" replaces "A" and "B" is deleted.
+        ###
+        for i in range(len(self.words)):
+            input_word = self.words[i]
+            start_pos, end_pos = adv_word_pos_by_orig[i]
+            adv_words = []
+            k = 0
+            for j, (word, sp) in enumerate(zip(perturbed_words, pert_word_pos)):
+                if sp >= start_pos and sp < end_pos:
+                    adv_words.append(word)
+                    k = j
+
+            perturbed_words = perturbed_words[k:]
+            pert_word_pos = pert_word_pos[k:]
+
             adv_num_words = len(adv_words)
-            num_words_diff = adv_num_words - len(words_from_text(input_word))
+            num_words_diff = adv_num_words - 1
             # Track indices on insertions and deletions.
             if num_words_diff != 0:
                 # Re-calculated modified indices. If words are inserted or deleted,
@@ -392,34 +434,18 @@ class AttackedText:
                     new_idx_map[new_idx_map == i] += num_words_diff
 
                 new_attack_attrs["original_index_map"] = new_idx_map
-            # Move pointer and save indices of new modified words.
-            for j in range(i, i + adv_num_words):
-                if input_word != adv_word_seq:
-                    new_attack_attrs["modified_indices"].add(new_i)
-                    new_attack_attrs["newly_modified_indices"].add(new_i)
-                new_i += 1
-            # Check spaces for deleted text.
-            if adv_num_words == 0 and len(original_text):
-                # Remove extra space (or else there would be two spaces for each
-                # deleted word).
-                # @TODO What to do with punctuation in this case? This behavior is undefined.
-                if i == 0:
-                    # If the first word was deleted, take a subsequent space.
-                    if original_text[0] == " ":
-                        original_text = original_text[1:]
-                else:
-                    # If a word other than the first was deleted, take a preceding space.
-                    if perturbed_text[-1] == " ":
-                        perturbed_text = perturbed_text[:-1]
-            # Add substitute word(s) to new sentence.
-            perturbed_text += adv_word_seq
-        perturbed_text += original_text  # Add all of the ending punctuation.
+
+            if input_word != perturbed_text[start_pos:end_pos]:
+                new_attack_attrs["modified_indices"].add(i)
+                new_attack_attrs["newly_modified_indices"].add(i)
+
         # Reform perturbed_text into an OrderedDict.
         perturbed_input_texts = perturbed_text.split(AttackedText.SPLIT_TOKEN)
         perturbed_input = OrderedDict(
             zip(self._text_input.keys(), perturbed_input_texts)
         )
-        return AttackedText(perturbed_input, attack_attrs=new_attack_attrs)
+
+        return AttackedText(perturbed_input, word_segmenter=self.word_segmenter, attack_attrs=new_attack_attrs)
 
     def words_diff_ratio(self, x):
         """Get the ratio of words difference between current text and `x`.
@@ -486,15 +512,16 @@ class AttackedText:
         """Returns a list of lists of words corresponding to each input."""
         if not self._words_per_input:
             self._words_per_input = [
-                words_from_text(_input) for _input in self._text_input.values()
+                self.word_segmenter(_input)[0]
+                for _input in self._text_input.values()
             ]
         return self._words_per_input
 
     @property
-    def words(self):
-        if not self._words:
-            self._words = words_from_text(self.text)
-        return self._words
+    def pos_tags(self):
+        if not self._pos_tags:
+            self._pos_tags = self.pos_tagger(self.words)
+        return self._pos_tags
 
     @property
     def text(self):
