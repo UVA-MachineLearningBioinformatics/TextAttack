@@ -15,8 +15,6 @@
         (compare_against_original):  True
       )
     (1): PartOfSpeech(
-        (tagger_type):  flair
-        (tagset):  universal
         (allow_verb_noun_swap):  True
         (compare_against_original):  True
       )

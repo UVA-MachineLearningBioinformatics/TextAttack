@@ -16,8 +16,6 @@
         (compare_against_original):  True
       )
     (1): PartOfSpeech(
-        (tagger_type):  nltk
-        (tagset):  universal
         (allow_verb_noun_swap):  True
         (compare_against_original):  True
       )
@@ -41,6 +39,7 @@ Running in interactive mode
 ----------------------------
 Enter a sentence to attack or "q" to quit:
 Attacking...
+/.*/
 [92m1 (96%)[0m --> [91m0 (74%)[0m
 
 All that [92mglitters[0m is not gold

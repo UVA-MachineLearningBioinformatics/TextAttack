@@ -108,7 +108,7 @@ attack_test_params = [
         "run_attack_flair_pos_tagger_bert_score",
         (
             "textattack attack --model bert-base-uncased-mr --search greedy-word-wir --transformation word-swap-embedding "
-            "--constraints repeat stopword bert-score^min_bert_score=0.8 part-of-speech^tagger_type=\\'flair\\' "
+            "--constraints repeat stopword bert-score^min_bert_score=0.8 part-of-speech "
             "--num-examples 4 --num-examples-offset 10 --shuffle=False"
         ),
         "tests/sample_outputs/run_attack_flair_pos_tagger_bert_score.txt",
@@ -142,7 +142,7 @@ attack_test_params = [
         "run_attack_stanza_pos_tagger",
         (
             "textattack attack --model lstm-mr --num-examples 4 --search-method greedy --transformation word-swap-embedding "
-            "--constraints repeat stopword part-of-speech^tagger_type=\\'stanza\\' --shuffle=False"
+            "--constraints repeat stopword part-of-speech --shuffle=False"
         ),
         "tests/sample_outputs/run_attack_stanza_pos_tagger.txt",
     ),

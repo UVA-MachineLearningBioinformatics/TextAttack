@@ -39,7 +39,7 @@ class WordSwapChangeName(WordSwap):
 
         for i in indices_to_modify:
             word_to_replace = current_text.words[i].capitalize()
-            word_to_replace_ner = current_text.ner_of_word_index(i)
+            word_to_replace_ner = current_text.ner_tags[i]
             replacement_words = self._get_replacement_words(
                 word_to_replace, word_to_replace_ner
             )

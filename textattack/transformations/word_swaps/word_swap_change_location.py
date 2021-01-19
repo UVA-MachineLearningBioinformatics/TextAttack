@@ -41,7 +41,7 @@ class WordSwapChangeLocation(WordSwap):
         location_idx = []
 
         for i in indices_to_modify:
-            tag = current_text.ner_of_word_index(i)
+            tag = current_text.ner_tags[i]
             if "LOC" in tag.value and tag.score > self.confidence_score:
                 location_idx.append(i)
 

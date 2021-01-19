@@ -112,11 +112,11 @@ class WordSwapMaskedLM(WordSwap):
         """
         masked_texts = []
         for index in indices_to_modify:
-            masked_text = current_text.replace_word_at_index_raw(
+            masked_text = current_text.replace_word_at_index(
                 index, self._lm_tokenizer.mask_token
             )
             # Obtain window
-            #masked_text = masked_text.text_window_around_index(index, self.window_size)
+            masked_text = masked_text.text_window_around_index(index, self.window_size)
             masked_texts.append(masked_text)
 
         i = 0
@@ -268,9 +268,9 @@ class WordSwapMaskedLM(WordSwap):
 
                 for r in replacement_words:
                     if r != word_at_index:
-                        new_text = current_text.replace_word_at_index(i, r)
-                        if new_text.num_words == current_text.num_words:
-                            transformed_texts.append(new_text)
+                        transformed_texts.append(
+                            current_text.replace_word_at_index(i, r)
+                        )
 
             return transformed_texts
 
@@ -284,9 +284,9 @@ class WordSwapMaskedLM(WordSwap):
                 word_at_index = current_text.words[index_to_modify]
                 for word in replacement_words[i]:
                     if word != word_at_index:
-                        new_text = current_text.replace_word_at_index(index_to_modify, word)
-                        if new_text.num_words == current_text.num_words:
-                            transformed_texts.append(new_text)
+                        transformed_texts.append(
+                            current_text.replace_word_at_index(index_to_modify, word)
+                        )
 
             return transformed_texts
         else:

@@ -49,6 +49,8 @@ class Attack:
         transformation=None,
         search_method=None,
         word_segmenter=None,
+        pos_tagger=None,
+        ner_tagger=None,
         transformation_cache_size=2 ** 15,
         constraint_cache_size=2 ** 15,
     ):
@@ -121,7 +123,9 @@ class Attack:
         if not search_method.is_black_box:
             self.search_method.get_model = lambda: self.goal_function.model
 
-        self.word_segmenter = word_segmenter
+        AttackedText.word_segmenter = word_segmenter
+        AttackedText.pos_tagger = pos_tagger
+        AttackedText.ner_tagger = ner_tagger
 
     def clear_cache(self, recursive=True):
         self.constraints_cache.clear()

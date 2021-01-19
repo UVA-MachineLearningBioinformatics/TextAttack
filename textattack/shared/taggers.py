@@ -1,4 +1,5 @@
 from abc import abstractmethod
+import logging
 
 import flair
 import nltk
@@ -6,6 +7,9 @@ import nltk
 from textattack.shared import utils
 
 flair.device = utils.device
+# Turn off flair logger
+logger = logging.getLogger("flair")
+logger.disabled = True
 
 
 class PosTagger(metaclass=utils.Singleton):
@@ -93,7 +97,7 @@ class EnglishPosTagger(PosTagger):
             self.pos_tagger = flair.models.SequenceTagger("pos-fast")
             tagger = self.pos_tagger
         tagger.predict(sent)
-        pos_list = [token.annotation_layers["pos"][0]._value for token in sent.tokens]
+        pos_list = [token.get_tag("pos").value for token in sent.tokens]
         if len(words) != len(pos_list):
             raise ValueError("Length of word list and POS tag list is different")
 
@@ -122,21 +126,27 @@ class EnglishPosTagger(PosTagger):
 class EnglishNerTagger(NerTagger):
     """Base class for NER tagging."""
 
-    @abstractmethod
+    def __init__(self):
+        self.tagger = flair.models.SequenceTagger.load("ner")
+
     def __call__(self, words):
         """Accepts a list of words and returns a list of NER tags.
 
         If word does not have a corresponding NER tag, simply assign
         None.
         """
-        raise NotImplementedError()
+        text = " ".join(words)
+        sent = flair.data.Sentence(text, use_tokenizer=lambda x: x.split())
+        self.tagger.predict(sent)
+        ner_list = [token.get_tag("ner") for token in sent.tokens]
+        if len(words) != len(ner_list):
+            raise ValueError("Length of word list and POS tag list is different")
+
+        return ner_list
 
 
 class KoreanNerTagger(NerTagger):
-    """Part-of-speech Tagger for Korea text.
-
-    Uses `khaiii` library.
-    """
+    """Name-entity-recognition Tagger for Korea text."""
 
     @abstractmethod
     def __call__(self, words):

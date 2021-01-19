@@ -7,8 +7,6 @@
   )
   (constraints): 
     (0): PartOfSpeech(
-        (tagger_type):  stanza
-        (tagset):  universal
         (allow_verb_noun_swap):  True
         (compare_against_original):  True
       )

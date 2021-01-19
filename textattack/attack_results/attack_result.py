@@ -6,7 +6,6 @@ Attack Result Class
 from abc import ABC
 
 from textattack.goal_function_results import GoalFunctionResult
-from textattack.shared import utils
 
 
 class AttackResult(ABC):
@@ -110,19 +109,8 @@ class AttackResult(ABC):
         # words to color in t2 are all the words that didn't have an equal,
         # mapped word in t1
         words_2_idxs = list(sorted(set(range(t2.num_words)) - t2_equal_idxs))
-
-        # make lists of colored words
-        words_1 = [t1.words[i] for i in words_1_idxs]
-        words_1 = [utils.color_text(w, color_1, color_method) for w in words_1]
-        words_2 = [t2.words[i] for i in words_2_idxs]
-        words_2 = [utils.color_text(w, color_2, color_method) for w in words_2]
-
-        t1 = self.original_result.attacked_text.replace_words_at_indices(
-            words_1_idxs, words_1
-        )
-        t2 = self.perturbed_result.attacked_text.replace_words_at_indices(
-            words_2_idxs, words_2
-        )
+        t1 = t1.color_words(words_1_idxs, color_method, color=color_1)
+        t2 = t2.color_words(words_2_idxs, color_method, color=color_2)
 
         key_color = ("bold", "underline")
         return (

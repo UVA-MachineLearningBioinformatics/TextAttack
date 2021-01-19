@@ -23,6 +23,38 @@ class WordSwap(Transformation):
         if not self.letters_to_insert:
             self.letters_to_insert = string.ascii_letters
 
+    def __call__(
+        self,
+        current_text,
+        pre_transformation_constraints=[],
+        indices_to_modify=None,
+        shifted_idxs=False,
+    ):
+        transformed_texts = super().__call__(
+            current_text,
+            pre_transformation_constraints=pre_transformation_constraints,
+            indices_to_modify=indices_to_modify,
+            shifted_idxs=shifted_idxs,
+        )
+        # Filter transformed texts so that number of words stay constant.
+        # return [
+        #     t
+        #     for t in transformed_texts
+        #     if t.num_words == current_text.num_words
+        #     and -1 not in t.attack_attrs["original_index_map"]
+        # ]
+        # a = []
+        # for t in transformed_texts:
+        #     if t.num_words == current_text.num_words:
+        #         if -1 not in t.attack_attrs["original_index_map"]:
+        #             a.append(t)
+        #         else:
+        #             print(t.attack_attrs["original_index_map"])
+        #     else:
+        #         print("doo")
+        # return a
+        return transformed_texts
+
     def _get_replacement_words(self, word):
         """Returns a set of replacements given an input word. Must be overriden
         by specific word swap transformations.
@@ -48,9 +80,8 @@ class WordSwap(Transformation):
             for r in replacement_words:
                 if r == word_to_replace:
                     continue
-                new_text = current_text.replace_word_at_index(i, r)
-                if new_text.num_words == current_text.num_words:
-                    transformed_texts_idx.append(new_text)
+
+                transformed_texts_idx.append(current_text.replace_word_at_index(i, r))
             transformed_texts.extend(transformed_texts_idx)
 
         return transformed_texts
