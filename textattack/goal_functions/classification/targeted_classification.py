@@ -24,7 +24,7 @@ class TargetedClassification(ClassificationGoalFunction):
             self.target_class == model_output.argmax()
         ) or self.ground_truth_output == self.target_class
 
-    def _get_score(self, model_output, _):
+    def _get_score(self, model_output, _=None):
         if self.target_class < 0 or self.target_class >= len(model_output):
             raise ValueError(
                 f"target class set to {self.target_class} with {len(model_output)} classes."

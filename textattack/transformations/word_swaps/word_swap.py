@@ -37,12 +37,11 @@ class WordSwap(Transformation):
             shifted_idxs=shifted_idxs,
         )
         # Filter transformed texts so that number of words stay constant.
-        # return [
-        #     t
-        #     for t in transformed_texts
-        #     if t.num_words == current_text.num_words
-        #     and -1 not in t.attack_attrs["original_index_map"]
-        # ]
+        return [
+            t
+            for t in transformed_texts
+            if t.num_words == current_text.num_words
+        ]
         # a = []
         # for t in transformed_texts:
         #     if t.num_words == current_text.num_words:
@@ -53,7 +52,7 @@ class WordSwap(Transformation):
         #     else:
         #         print("doo")
         # return a
-        return transformed_texts
+        # return transformed_texts
 
     def _get_replacement_words(self, word):
         """Returns a set of replacements given an input word. Must be overriden

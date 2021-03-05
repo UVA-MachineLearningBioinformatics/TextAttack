@@ -18,8 +18,8 @@ class WordSegmenter(metaclass=utils.Singleton):
 
 
 class EnglishWordSegmenter(WordSegmenter):
-    def __call__(self, text):
-        homoglyphs = {
+
+    HOMOGLYPHS = {
             "˗",
             "৭",
             "Ȣ",
@@ -59,11 +59,12 @@ class EnglishWordSegmenter(WordSegmenter):
             "у",
             "ᴢ",
         }
+    def __call__(self, text):
         words = []
         start_positions = []
         word = ""
         for i, c in enumerate(text):
-            if c.isalnum() or c in homoglyphs:
+            if c.isalnum() or c in EnglishWordSegmenter.HOMOGLYPHS:
                 word += c
             elif c in "'-_*@" and len(word) > 0:
                 # Allow apostrophes, hyphens, underscores, asterisks and at signs as long as they don't begin the
@@ -155,11 +156,9 @@ class KoreanWordSegmenter(WordSegmenter):
         return words, start_positions, pos_tags
 
     def __getstate__(self):
-        """Getter for pickling."""
         return {}
 
     def __setstate__(self, state):
-        """Setter for pickling."""
         custom_install_direction = (
             "Lazy module loader cannot find module named `khaiii`. "
             "This might be because TextAttack does not automatically install some optional dependencies. "
@@ -171,6 +170,7 @@ class KoreanWordSegmenter(WordSegmenter):
         self.api = khaiii.KhaiiiApi()
 
 
+
 class ChineseWordSegmenter(WordSegmenter):
     """Segmenter for splitting Chinese text into "words" (or more accurately,
     morphemes)."""
@@ -180,7 +180,7 @@ class ChineseWordSegmenter(WordSegmenter):
 
     def __init__(self):
         stanza = utils.LazyLoader("stanza", globals(), "stanza")
-        self.pipeline = stanza.Pipeline(lang="zh", processors="tokenize, pos")
+        self.pipeline = stanza.Pipeline(lang="zh", processors="tokenize, pos", tokenize_no_ssplit=True)
 
     def __call__(self, text):
         """Accepts single string and returns a list of words, a list of start
@@ -188,22 +188,23 @@ class ChineseWordSegmenter(WordSegmenter):
 
         and a list of part-of-speech tag of each of the words.
         """
-        doc = self.pipeline(text)
+        
+        text_list = text.split("\n")
+        doc = self.pipeline(text_list)
         words = []
         start_positions = []
         pos_tags = []
         for sent in doc.sentences:
             for word in sent.words:
+                # This strips punctuations
                 words.append(word.text)
-                start_positions.append(int(word.split("|")[0][11:]))
+                start_positions.append(int(word.misc.split("|")[0][11:]))
                 pos_tags.append(word.xpos)
         return words, start_positions, pos_tags
 
     def __getstate__(self):
-        """Getter for pickling."""
         return {}
 
     def __setstate__(self, state):
-        """Setter for pickling."""
         stanza = utils.LazyLoader("stanza", globals(), "stanza")
-        self.pipeline = stanza.Pipeline(lang="zh", processors="tokenize, pos")
+        self.pipeline = stanza.Pipeline(lang="zh", processors="tokenize, pos", tokenize_no_ssplit=True)

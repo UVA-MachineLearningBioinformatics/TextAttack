@@ -34,10 +34,10 @@ class UntargetedClassification(ClassificationGoalFunction):
         else:
             return model_output.argmax() != self.ground_truth_output
 
-    def _get_score(self, model_output, _):
+    def _get_score(self, model_output, _=None):
         # If the model outputs a single number and the ground truth output is
         # a float, we assume that this is a regression task.
         if (model_output.numel() == 1) and isinstance(self.ground_truth_output, float):
             return abs(model_output.item() - self.ground_truth_output)
         else:
-            return 1 - model_output[self.ground_truth_output]
+            return (1 - model_output)[self.ground_truth_output]

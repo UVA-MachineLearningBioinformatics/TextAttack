@@ -2,6 +2,7 @@ import collections
 import logging
 import multiprocessing as mp
 import os
+import traceback
 
 import dill
 import torch
@@ -19,6 +20,9 @@ from textattack.shared.utils import logger
 from .attack import Attack
 from .attack_args import AttackArgs
 
+# import logging
+# logger = mp.log_to_stderr()
+# logger.setLevel(mp.SUBDEBUG)
 
 class Attacker:
     """Class for running attacks on a dataset with specified parameters. This
@@ -94,7 +98,7 @@ class Attacker:
         """
         for k in kwargs:
             if hasattr(self.attack_args, k):
-                self.attack_args.k = kwargs[k]
+                setattr(self.attack_args, k, kwargs[k])
             else:
                 raise ValueError(f"`AttackArgs` does not have field {k}.")
 
@@ -160,7 +164,12 @@ class Attacker:
             idx = worklist.popleft()
             i += 1
             example, ground_truth_output = self.dataset[idx]
-            example = textattack.shared.AttackedText(example)
+            example = example = textattack.shared.AttackedText(
+                example, 
+                word_segmenter=self.attack.word_segmenter,
+                pos_tagger=self.attack.pos_tagger,
+                ner_tagger=self.attack.ner_tagger
+            )
             if self.dataset.label_names is not None:
                 example.attack_attrs["label_names"] = self.dataset.label_names
             result = self.attack.attack(example, ground_truth_output)
@@ -273,12 +282,24 @@ class Attacker:
             num_successes = 0
         pbar = tqdm.tqdm(total=num_remaining_attacks, smoothing=0)
         while worklist:
-            result = out_queue.get(block=True)
-            if isinstance(result, Exception):
-                raise result
-            idx, result = result
-            self.attack_log_manager.log_result(result)
+            idx, result = out_queue.get(block=True)
             worklist.remove(idx)
+            if isinstance(result, Exception):
+                #raise result
+
+                worklist_tail += 1
+                try:
+                    example, ground_truth_output = self.dataset[worklist_tail]
+                    worklist.append(worklist_tail)
+                    in_queue.put((worklist_tail, example, ground_truth_output))
+                except IndexError:
+                    logger.warn(
+                        f"Attempted to attack {self.attack_args.num_examples} examples with but ran out of examples. "
+                        f"You might see fewer number of results than {self.attack_args.num_examples}."
+                    )
+                continue
+
+            self.attack_log_manager.log_result(result)
             if self.attack_args.attack_n and isinstance(result, SkippedAttackResult):
                 # worklist_tail keeps track of highest idx that has been part of worklist
                 # Used to get the next dataset element when attacking with `attack_n` = True.
@@ -306,7 +327,7 @@ class Attacker:
 
             if (
                 self.attack_args.checkpoint_interval
-                and len(self.attack_log_manager.results)
+                and num_results > 0 and num_results
                 % self.attack_args.checkpoint_interval
                 == 0
             ):
@@ -368,7 +389,12 @@ class Attacker:
 
             print("Attacking...")
 
-            example = textattack.shared.AttackedText(text)
+            example = textattack.shared.AttackedText(
+                text, 
+                word_segmenter=attack.word_segmenter,
+                pos_tagger=attack.pos_tagger,
+                ner_tagger=attack.ner_tagger
+            )
             output = attack.goal_function.get_output(example)
             result = attack.attack(example, output)
             print(result.__str__(color_method="ansi") + "\n")
@@ -447,10 +473,16 @@ def attack_from_queue(
     while not in_queue.empty():
         try:
             i, example, ground_truth_output = in_queue.get()
-            example = textattack.shared.AttackedText(example)
+            example = textattack.shared.AttackedText(
+                example, 
+                word_segmenter=attack.word_segmenter,
+                pos_tagger=attack.pos_tagger,
+                ner_tagger=attack.ner_tagger
+            )
             example.attack_attrs["label_names"] = label_names
             result = attack.attack(example, ground_truth_output)
             out_queue.put((i, result))
         except Exception as e:
-            out_queue.put(e)
-            exit()
+            traceback.print_exc()
+            out_queue.put((i, e))
+            #exit()

@@ -153,6 +153,11 @@ class AttackCheckpoint:
         return len(self.attack_log_manager.results)
 
     @property
+    def attack_count(self):
+        """Return number of attacks made so far."""
+        return len(self.attack_log_manager.results) - self.num_skipped_attacks
+
+    @property
     def num_skipped_attacks(self):
         return sum(
             isinstance(r, SkippedAttackResult) for r in self.attack_log_manager.results
@@ -206,7 +211,7 @@ class AttackCheckpoint:
             print("\n\n" + "=" * 125)
             logger.info(
                 'Saving checkpoint under "{}" at {} after {} attacks.'.format(
-                    path, self.datetime, self.results_count
+                    path, self.datetime, self.attack_count
                 )
             )
             print("=" * 125 + "\n")

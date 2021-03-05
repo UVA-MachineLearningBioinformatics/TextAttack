@@ -33,7 +33,6 @@ class BeamSearch(SearchMethod):
                     text, original_text=initial_result.attacked_text
                 )
                 potential_next_beam += transformations
-
             if len(potential_next_beam) == 0:
                 # If we did not find any possible perturbations, give up.
                 return best_result

@@ -123,9 +123,9 @@ class Attack:
         if not search_method.is_black_box:
             self.search_method.get_model = lambda: self.goal_function.model
 
-        AttackedText.word_segmenter = word_segmenter
-        AttackedText.pos_tagger = pos_tagger
-        AttackedText.ner_tagger = ner_tagger
+        self.word_segmenter = word_segmenter
+        self.pos_tagger = pos_tagger
+        self.ner_tagger = ner_tagger
 
     def clear_cache(self, recursive=True):
         self.constraints_cache.clear()
@@ -261,37 +261,6 @@ class Attack:
         filtered_texts.sort(key=lambda t: t.text)
         return filtered_texts
 
-    def _attack(self, initial_result):
-        """Calls the ``SearchMethod`` to perturb the ``AttackedText`` stored in
-        ``initial_result``.
-
-        Args:
-            initial_result: The initial ``GoalFunctionResult`` from which to perturb.
-
-        Returns:
-            A ``SuccessfulAttackResult``, ``FailedAttackResult``,
-                or ``MaximizedAttackResult``.
-        """
-        final_result = self.search_method(initial_result)
-        self.clear_cache()
-        if final_result.goal_status == GoalFunctionResultStatus.SUCCEEDED:
-            return SuccessfulAttackResult(
-                initial_result,
-                final_result,
-            )
-        elif final_result.goal_status == GoalFunctionResultStatus.SEARCHING:
-            return FailedAttackResult(
-                initial_result,
-                final_result,
-            )
-        elif final_result.goal_status == GoalFunctionResultStatus.MAXIMIZING:
-            return MaximizedAttackResult(
-                initial_result,
-                final_result,
-            )
-        else:
-            raise ValueError(f"Unrecognized goal status {final_result.goal_status}")
-
     def attack(self, example, ground_truth_output):
         """Attack a single example represented as ``AttackedText``
         Args:
@@ -308,15 +277,37 @@ class Attack:
         ), "`ground_truth_output` must either be `str` or `int`."
 
         if not isinstance(example, AttackedText):
-            example = AttackedText(example, word_segmenter=self.word_segmenter)
-        goal_function_result, _ = self.goal_function.init_attack_example(
+            example = AttackedText(
+                example, 
+                word_segmenter=self.word_segmenter,
+                pos_tagger=self.pos_tagger,
+                ner_tagger=self.ner_tagger
+            )
+        initial_result, _ = self.goal_function.init_attack_example(
             example, ground_truth_output
         )
-        if goal_function_result.goal_status == GoalFunctionResultStatus.SKIPPED:
-            return SkippedAttackResult(goal_function_result)
+        if initial_result.goal_status == GoalFunctionResultStatus.SKIPPED:
+            return SkippedAttackResult(initial_result)
         else:
-            result = self._attack(goal_function_result)
-            return result
+            final_result = self.search_method(initial_result)
+            self.clear_cache()
+            if final_result.goal_status == GoalFunctionResultStatus.SUCCEEDED:
+                return SuccessfulAttackResult(
+                    initial_result,
+                    final_result,
+                )
+            elif final_result.goal_status == GoalFunctionResultStatus.SEARCHING:
+                return FailedAttackResult(
+                    initial_result,
+                    final_result,
+                )
+            elif final_result.goal_status == GoalFunctionResultStatus.MAXIMIZING:
+                return MaximizedAttackResult(
+                    initial_result,
+                    final_result,
+                )
+            else:
+                raise ValueError(f"Unrecognized goal status {final_result.goal_status}")
 
     def __repr__(self):
         """Prints attack parameters in a human-readable string.

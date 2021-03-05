@@ -62,7 +62,7 @@ class HuggingFaceModelWrapper(PyTorchModelWrapper):
 
         return outputs
 
-    def get_grad(self, text_input):
+    def get_grad(self, text_input, func=None):
         """Get gradient of loss with respect to input tokens.
 
         Args:
@@ -97,15 +97,19 @@ class HuggingFaceModelWrapper(PyTorchModelWrapper):
         input_dict = {
             k: torch.tensor(v).to(model_device) for k, v in input_dict.items()
         }
-        try:
-            labels = predictions.argmax(dim=1)
-            loss = self.model(**input_dict, labels=labels)[0]
-        except TypeError:
-            raise TypeError(
-                f"{type(self.model)} class does not take in `labels` to calculate loss. "
-                "One cause for this might be if you instantiatedyour model using `transformer.AutoModel` "
-                "(instead of `transformers.AutoModelForSequenceClassification`)."
-            )
+        if func:
+            probs = torch.nn.functional.softmax(predictions, dim=1)[0]
+            loss = func(probs)
+        else:
+            try:
+                labels = predictions.argmax(dim=1)
+                loss = self.model(**input_dict, labels=labels)[0]
+            except TypeError:
+                raise TypeError(
+                    f"{type(self.model)} class does not take in `labels` to calculate loss. "
+                    "One cause for this might be if you instantiated your model using `transformer.AutoModel` "
+                    "(instead of `transformers.AutoModelForSequenceClassification`)."
+                )
 
         loss.backward()
 

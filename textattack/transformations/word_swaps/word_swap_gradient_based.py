@@ -22,10 +22,11 @@ class WordSwapGradientBased(WordSwap):
     Arguments:
         model (nn.Module): The model to attack. Model must have a
             `word_embeddings` matrix and `convert_id_to_word` function.
+        loss_func: Function that we want to calculate gradient of. Default is just default loss function for the model.
         top_n (int): the number of top words to return at each index
     """
 
-    def __init__(self, model_wrapper, top_n=1):
+    def __init__(self, model_wrapper, loss_func=None, top_n=1):
         # Unwrap model wrappers. Need raw model for gradient.
         if not isinstance(model_wrapper, textattack.models.wrappers.ModelWrapper):
             raise TypeError(f"Got invalid model wrapper type {type(model_wrapper)}")
@@ -33,7 +34,7 @@ class WordSwapGradientBased(WordSwap):
         self.model_wrapper = model_wrapper
         self.tokenizer = self.model_wrapper.tokenizer
         # Make sure we know how to compute the gradient for this model.
-        validate_model_gradient_word_swap_compatibility(self.model)
+        #validate_model_gradient_word_swap_compatibility(self.model)
         # Make sure this model has all of the required properties.
         if not hasattr(self.model, "get_input_embeddings"):
             raise ValueError(
@@ -44,6 +45,7 @@ class WordSwapGradientBased(WordSwap):
                 "Tokenizer needs to have `pad_token_id` for gradient-based word swap"
             )
 
+        self.loss_func = loss_func
         self.top_n = top_n
         self.is_black_box = False
 
@@ -58,7 +60,7 @@ class WordSwapGradientBased(WordSwap):
 
         lookup_table = self.model.get_input_embeddings().weight.data.cpu()
 
-        grad_output = self.model_wrapper.get_grad(attacked_text.tokenizer_input)
+        grad_output = self.model_wrapper.get_grad(attacked_text.tokenizer_input, func=self.loss_func)
         emb_grad = torch.tensor(grad_output["gradient"])
         text_ids = grad_output["ids"]
         # grad differences between all flips and original word (eq. 1 from paper)
@@ -87,7 +89,7 @@ class WordSwapGradientBased(WordSwap):
             idx_in_diffs = idx // num_words_in_vocab
             idx_in_vocab = idx % (num_words_in_vocab)
             idx_in_sentence = indices_to_replace[idx_in_diffs]
-            word = self.tokenizer.convert_id_to_word(idx_in_vocab)
+            word = self.tokenizer.convert_ids_to_tokens(idx_in_vocab)
             if (not utils.has_letter(word)) or (len(utils.words_from_text(word)) != 1):
                 # Do not consider words that are solely letters or punctuation.
                 continue

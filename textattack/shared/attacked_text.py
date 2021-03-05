@@ -15,9 +15,9 @@ import torch
 
 import textattack
 
-from .taggers import EnglishNerTagger, EnglishPosTagger
 from .utils import color_text
 from .word_segmenters import EnglishWordSegmenter
+from .taggers import EnglishNerTagger, EnglishPosTagger
 
 
 class AttackedText:
@@ -40,11 +40,8 @@ class AttackedText:
     """
 
     SPLIT_TOKEN = ">>>>"
-    word_segmenter = None
-    pos_tagger = None
-    ner_tagger = None
 
-    def __init__(self, text_input, attack_attrs=None):
+    def __init__(self, text_input, word_segmenter=EnglishWordSegmenter(), pos_tagger=None, ner_tagger=None, attack_attrs=None):
         # Read in ``text_input`` as a string or OrderedDict.
         if isinstance(text_input, str):
             self._text_input = OrderedDict([("text", text_input)])
@@ -55,10 +52,9 @@ class AttackedText:
                 f"Invalid text_input type {type(text_input)} (required str or OrderedDict)"
             )
 
-        if AttackedText.word_segmenter:
-            self.word_segmenter = AttackedText.word_segmenter
-        else:
-            self.word_segmenter = EnglishWordSegmenter()
+        self.word_segmenter = word_segmenter
+        self.pos_tagger = pos_tagger
+        self.ner_tagger = ner_tagger
 
         if self.word_segmenter.POS_TAGGING_INCLUDED:
             self.words, self.words_start_pos, self._pos_tags = self.word_segmenter(
@@ -68,8 +64,6 @@ class AttackedText:
             self.words, self.words_start_pos = self.word_segmenter(self.text)
             self._pos_tags = None
 
-        self.pos_tagger = AttackedText.pos_tagger
-        self.ner_tagger = AttackedText.ner_tagger
         self._ner_tags = None
         self._words_per_input = None
 
@@ -102,6 +96,8 @@ class AttackedText:
                     return False
                 elif not (self.attack_attrs[key] == other.attack_attrs[key]).all():
                     return False
+            elif isinstance(self.attack_attrs[key], AttackedText):
+                continue
             else:
                 if not self.attack_attrs[key] == other.attack_attrs[key]:
                     return False
@@ -115,7 +111,7 @@ class AttackedText:
         result = cls.__new__(cls)
         memo[id(self)] = result
         for k, v in self.__dict__.items():
-            if k == "word_segmenter" or k == "pos_tagger":
+            if k == "word_segmenter":
                 setattr(result, k, getattr(self, k))
             elif k == "attack_attrs":
                 new_attack_attrs = {}
@@ -132,13 +128,25 @@ class AttackedText:
                 setattr(result, k, copy.deepcopy(v, memo))
         return result
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["word_segmenter"] = self.word_segmenter.__class__
+        state["pos_tagger"] = self.pos_tagger.__class__
+        state["ner_tagger"] = self.ner_tagger.__class__
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__ = state
+        self.word_segmenter = self.word_segmenter()
+        self.pos_tagger = self.pos_tagger()
+        self.ner_tagger = self.ner_tagger()
+
     def free_memory(self):
         """Delete items that take up memory.
-
         Can be called once the AttackedText is only needed to display.
         """
         if "previous_attacked_text" in self.attack_attrs:
-            self.attack_attrs["previous_attacked_text"].free_memory()
+            del self.attack_attrs["previous_attacked_text"]
         if "last_transformation" in self.attack_attrs:
             del self.attack_attrs["last_transformation"]
         for key in self.attack_attrs:
@@ -436,6 +444,9 @@ class AttackedText:
 
         return AttackedText(
             perturbed_input,
+            word_segmenter=self.word_segmenter,
+            pos_tagger=self.pos_tagger,
+            ner_tagger=self.ner_tagger,
             attack_attrs=new_attack_attrs,
         )
 
@@ -510,17 +521,17 @@ class AttackedText:
 
     @property
     def pos_tags(self):
-        if not self.pos_tagger:
-            self.pos_tagger = EnglishPosTagger()
         if not self._pos_tags:
+            if not self.pos_tagger:
+                self.pos_tagger = EnglishPosTagger()
             self._pos_tags = self.pos_tagger(self.words)
         return self._pos_tags
 
     @property
     def ner_tags(self):
-        if not self.ner_tagger:
-            self.ner_tagger = EnglishNerTagger()
         if not self._ner_tags:
+            if not self.ner_tagger:
+                self.ner_tagger = EnglishNerTagger()
             self._ner_tags = self.ner_tagger(self.words)
         return self._ner_tags
 
